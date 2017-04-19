@@ -5,20 +5,26 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Dapper;
+using NLog;
 
 namespace UaNetCrawler
 {
     class SqliteDatabase : IDatabase
     {
+        private static readonly Logger Log = LogManager.GetCurrentClassLogger();
+
         private SQLiteConnection connection;
 
-        public string Path = @"d:\Slavik\work\kitsoft\FakeFighter\UaNetCrawler\UaNet.sqlite";
+        public string Path = @"..\..\UaNet.sqlite";
 
-        private long _id = 1000;
+        private long _id;
         private object _lock = new object();
 
         public void Initialize()
         {
+            this.OpenDB();
+            var maxId = this.connection.QuerySingle<int>("SELECT Max(Id) FROM job");
+            _id = Math.Max(1000, maxId + 1);
         }
 
         public IDisposable OpenDB()
@@ -55,6 +61,7 @@ namespace UaNetCrawler
 
         public void RunInTransaction(Action action)
         {
+            connection.Open();
             using(var tran = this.connection.BeginTransaction())
             {
                 try
@@ -66,14 +73,26 @@ namespace UaNetCrawler
                 {
                     tran.Rollback();
                 }
+                finally
+                {
+                    connection.Close();
+                }
             }
         }
 
         public void InsertJob(Job job)
         {
+            var urlExists = this.connection.QueryFirstOrDefault<int?>("SELECT Id FROM job WHERE URL = @Url LIMIT 1", new {job.Url}).HasValue;
+
+            if (urlExists)
+            {
+                Log.Debug($"Url already exists in database. [{job.Url}]");
+                return;
+            }
+
             job.Id = GetNextId();
-            this.connection.Execute("INSERT INTO job(Id, ParentId, Domain, URL, IsProcessed) VALUES (@Id, @ParentId, @Domain, @Url, @IsProcessed)",
-                new { job.Id, job.ParentId, job.Domain, job.Url, IsProcessed = DBNull.Value });
+            this.connection.Execute("INSERT INTO job(Id, ParentId, Domain, URL) VALUES (@Id, @ParentId, @Domain, @Url)",
+                new { job.Id, job.ParentId, job.Domain, job.Url });
         }
 
         public void UpdateJob(Job job)

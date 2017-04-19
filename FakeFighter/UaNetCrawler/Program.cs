@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using NLog;
+using NLog.Config;
 
 namespace UaNetCrawler
 {
@@ -10,6 +8,8 @@ namespace UaNetCrawler
     {
         static void Main(string[] args)
         {
+            InitNlog();
+
             IDatabase database = new SqliteDatabase();
             database.Initialize();
             var crawler = new Crawler(database);
@@ -22,6 +22,15 @@ namespace UaNetCrawler
             } while (key.Key != ConsoleKey.Escape);
 
             crawler.Stop();
+        }
+
+        private static void InitNlog()
+        {
+            var nlogConfigFile = "NLog.config";
+            LogManager.Configuration = new XmlLoggingConfiguration(nlogConfigFile, true);
+            //LogManager.Configuration.Variables["appName"] = ?;
+            LogManager.Configuration.Variables["fileSuffix"] = DateTime.Now.ToString("yyyy-MM-dd HH.mm.ss ");
+            LogManager.ReconfigExistingLoggers();
         }
     }
 }
